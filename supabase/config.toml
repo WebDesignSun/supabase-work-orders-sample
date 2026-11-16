@@ -1,0 +1,61 @@
+# Local Supabase stack for the work-order sample.
+# Only the services the sample needs are enabled; everything else stays off so
+# `supabase start` is fast and the surface is small.
+
+project_id = "supabase-work-orders-sample"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+# The work-order-report function refuses ranges with more rows than this
+# (MAX_WORK_ORDERS in logic.ts) instead of returning a silently truncated report.
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 17
+
+[db.seed]
+enabled = true
+sql_paths = ["./seed.sql"]
+
+[studio]
+enabled = true
+port = 54323
+api_url = "http://127.0.0.1"
+
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:3000"
+jwt_expiry = 3600
+# Accounts are provisioned by an admin (seed.sql locally), never self-registered.
+enable_signup = false
+enable_anonymous_sign_ins = false
+
+[auth.email]
+enable_confirmations = false
+
+[edge_runtime]
+enabled = true
+policy = "per_worker"
+deno_version = 2
+
+[functions.work-order-report]
+# The gateway rejects requests without a valid JWT; the function additionally
+# resolves the user with auth.getUser() and checks the caller's role.
+verify_jwt = true
+
+[realtime]
+enabled = false
+
+[storage]
+enabled = false
+
+[analytics]
+enabled = false
+
+[local_smtp]
+enabled = false

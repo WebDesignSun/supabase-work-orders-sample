@@ -1,0 +1,91 @@
+# Runs every check from CLAUDE.md ("Before saying done") on every pull request
+# and on main. A red run means the task is not finished.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash # bash -eo pipefail: a failing command in a pipe fails the step
+
+env:
+  DENO_VERSION: 2.9.8
+  SUPABASE_CLI_VERSION: 3.0.0
+
+jobs:
+  deno:
+    name: Deno (lint, fmt, check, test)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: denoland/setup-deno@v2.0.5
+        with:
+          deno-version: ${{ env.DENO_VERSION }}
+          cache: true
+
+      - name: deno lint
+        run: deno lint
+
+      - name: deno fmt --check
+        run: deno fmt --check
+
+      - name: deno check
+        run: deno check supabase/functions/*/index.ts
+
+      - name: deno test
+        run: deno test
+
+  database:
+    name: Database (migrations, pgTAP, types drift)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: supabase/setup-cli@v3.2.0
+        with:
+          version: ${{ env.SUPABASE_CLI_VERSION }}
+
+      - uses: denoland/setup-deno@v2.0.5
+        with:
+          deno-version: ${{ env.DENO_VERSION }}
+
+      # Only Postgres, Auth (owns the auth schema migrations) and postgres-meta
+      # (used by `gen types`) are needed here.
+      - name: supabase start
+        run: >-
+          supabase start
+          -x studio,imgproxy,mailpit,realtime,storage-api,logflare,vector,supavisor,edge-runtime,kong,postgrest
+
+      - name: supabase db reset (migrations + seed apply cleanly)
+        run: supabase db reset
+
+      - name: supabase test db (pgTAP)
+        run: supabase test db
+
+      - name: Generated types match the schema
+        run: |
+          committed=supabase/functions/_shared/database.types.ts
+          supabase gen types typescript --local --schema public > "$RUNNER_TEMP/generated.ts"
+          deno fmt --ext ts - < "$RUNNER_TEMP/generated.ts" > "$RUNNER_TEMP/formatted.ts"
+          # The committed file starts with a comment header and a blank line.
+          if ! diff -u <(sed '1,/^$/d' "$committed") "$RUNNER_TEMP/formatted.ts"; then
+            echo "::error file=$committed::Out of date. Regenerate it as described in CLAUDE.md (gen types + deno fmt)."
+            exit 1
+          fi
+
+      - name: supabase stop
+        if: always()
+        run: supabase stop --no-backup
