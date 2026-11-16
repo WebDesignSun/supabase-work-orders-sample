@@ -33,7 +33,9 @@ These patterns come straight from that codebase:
   correspond to our `ADMIN` / `MANAGER` / `STAFF`.
 - **Only members of the unit can be assigned.** In the product this is checked in
   code. Here a composite foreign key enforces it.
-- **The last admin of a unit cannot be removed or demoted.**
+- **The last admin of a unit cannot be removed or demoted.** This also blocks
+  deleting the user account of a unit's last admin: hand the admin role to
+  another member first.
 - **Calendar dates and instants are different things.** A due date is a calendar
   date in the unit's IANA time zone, and a completion time is an instant. They
   are compared only after the instant is converted to the unit's local date.
