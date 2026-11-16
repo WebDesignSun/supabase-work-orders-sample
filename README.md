@@ -10,7 +10,7 @@ range, as JSON or CSV.
 | Migration: tables | `supabase/migrations/20261112090000_create_work_order_tables.sql` |
 | Migration: RLS | `supabase/migrations/20261112090100_work_order_rls_policies.sql` |
 | Edge Function | `supabase/functions/work-order-report/` (`index.ts`, `logic.ts`) |
-| Tests: RLS (pgTAP) | `supabase/tests/rls_work_orders.test.sql` — 36 tests |
+| Tests: RLS (pgTAP) | `supabase/tests/rls_work_orders.test.sql` — 37 tests |
 | Tests: logic (Deno) | `supabase/functions/work-order-report/logic_test.ts` — 16 tests |
 
 ## Where this sample comes from
@@ -33,7 +33,9 @@ These patterns come straight from that codebase:
   correspond to our `ADMIN` / `MANAGER` / `STAFF`.
 - **Only members of the unit can be assigned.** In the product this is checked in
   code. Here a composite foreign key enforces it.
-- **The last admin of a unit cannot be removed or demoted.**
+- **The last admin of a unit cannot be removed or demoted.** This also blocks
+  deleting the user account of a unit's last admin: hand the admin role to
+  another member first.
 - **Calendar dates and instants are different things.** A due date is a calendar
   date in the unit's IANA time zone, and a completion time is an instant. They
   are compared only after the instant is converted to the unit's local date.
@@ -224,7 +226,7 @@ to the function log only.
 
 ## Tests
 
-**pgTAP** — `supabase/tests/rls_work_orders.test.sql`, 36 tests. The file
+**pgTAP** — `supabase/tests/rls_work_orders.test.sql`, 37 tests. The file
 creates its own fixtures (two units, six users) inside the test transaction, so
 it does not depend on `seed.sql`. It covers:
 
@@ -245,6 +247,7 @@ it does not depend on `seed.sql`. It covers:
   - delete orders, add members or change the unit.
 - **admin:** can delete orders and add members. Cannot demote the last admin,
   and sees and removes nothing of another unit.
+- **Last admin:** deleting the user account of a unit's last admin is refused.
 - **Cross-unit:** the other unit's admin sees only its own orders and none of
   unit A's comments.
 
@@ -275,7 +278,7 @@ Prerequisites: Docker, [Supabase CLI](https://supabase.com/docs/guides/cli) ≥ 
 ```bash
 cp .env.example .env            # then pick your own DEMO_PASSWORD
 supabase start                  # starts Postgres, Auth, REST and the Edge Runtime; applies both migrations and seed.sql
-supabase test db                # pgTAP: 36 tests
+supabase test db                # pgTAP: 37 tests
 deno test                       # Deno: 16 tests
 deno lint && deno fmt --check   # static checks
 ```
@@ -315,14 +318,14 @@ The seeded users are:
 | `clara.tech@example.com` | Crew North | technician | 403 |
 | `south.admin@example.com` | Crew South | admin | 404 for Crew North |
 
-### Test run (clean `supabase db reset`, 12 Nov 2026; local paths and timings removed)
+### Test run (clean `supabase db reset`, 16 Nov 2026; local paths removed)
 
 ```text
 $ supabase test db
 Target: local stack (127.0.0.1:54322)
 supabase/tests/rls_work_orders.test.sql .. ok
 All tests successful.
-Files=1, Tests=36,  0 wallclock secs ( 0.00 usr +  0.01 sys =  0.01 CPU)
+Files=1, Tests=37,  0 wallclock secs ( 0.01 usr  0.00 sys +  0.01 cusr  0.00 csys =  0.02 CPU)
 Result: PASS
 
 $ deno test
@@ -371,7 +374,8 @@ supabase db advisors --remote
 
 Results:
 
-- **pgTAP:** 36/36 tests passed against the hosted database.
+- **pgTAP:** 36/36 tests passed against the hosted database (12 Nov 2026,
+  before the last-admin deletion test was added).
 - **Advisors:** no findings for the schema (RLS, `security definer`
   functions, `search_path`, foreign-key indexes). The only warning was the
   project-level Auth setting "Leaked password protection", which is not part
