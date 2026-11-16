@@ -21,7 +21,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(36);
+select plan(37);
 
 -- ---------------------------------------------------------------------------
 -- Fixtures (as the table owner, RLS does not apply)
@@ -341,6 +341,12 @@ select is(
   (select title from public.work_orders where id = 'aaaaaaaa-0000-4000-8000-0000000000c1'),
   'Order 1',
   'the rejected title change left order 1 as it was'
+);
+
+select throws_ok(
+  $$ delete from auth.users where id = 'bbbbbbbb-0000-4000-8000-0000000000b1' $$,
+  '23514', 'A business unit must keep at least one admin',
+  'deleting the user account of a unit''s last admin is refused'
 );
 
 select * from finish();
